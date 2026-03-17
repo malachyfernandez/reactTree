@@ -141,6 +141,7 @@ export function startInteractiveUI(opts: {
     lastLines = renderDomLines(root, collapsedIds);
     list.setItems(lastLines.map((l) => l.text));
     if (list.selected == null) list.select(0);
+    list.focus();
     screen.render();
   };
 
@@ -160,9 +161,21 @@ export function startInteractiveUI(opts: {
     screen.destroy();
     process.exit(0);
   });
+  // Ensure arrows always move selection even if focus is lost.
+  screen.key(["up"], () => {
+    list.up(1);
+    screen.render();
+  });
+  screen.key(["down"], () => {
+    list.down(1);
+    screen.render();
+  });
   // Bind on list to avoid blessed-contrib tree default behavior (jumping to top)
   list.key(["enter", "space", "+"], () => toggleSelected());
-  if (opts.enableMouse) list.on("select", () => toggleSelected());
+  if (opts.enableMouse) {
+    // Click toggles; select alone is triggered by Enter in blessed list, so don't use it.
+    list.on("click", () => toggleSelected());
+  }
 
   return {
     updateTree: (root, metaLine) => {

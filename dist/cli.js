@@ -106,7 +106,7 @@ var require_generated = __commonJS({
     exports.isArrayExpression = isArrayExpression2;
     exports.isArrayPattern = isArrayPattern;
     exports.isArrayTypeAnnotation = isArrayTypeAnnotation;
-    exports.isArrowFunctionExpression = isArrowFunctionExpression3;
+    exports.isArrowFunctionExpression = isArrowFunctionExpression2;
     exports.isAssignmentExpression = isAssignmentExpression;
     exports.isAssignmentPattern = isAssignmentPattern;
     exports.isAwaitExpression = isAwaitExpression;
@@ -116,7 +116,7 @@ var require_generated = __commonJS({
     exports.isBindExpression = isBindExpression;
     exports.isBlock = isBlock;
     exports.isBlockParent = isBlockParent;
-    exports.isBlockStatement = isBlockStatement3;
+    exports.isBlockStatement = isBlockStatement2;
     exports.isBooleanLiteral = isBooleanLiteral;
     exports.isBooleanLiteralTypeAnnotation = isBooleanLiteralTypeAnnotation;
     exports.isBooleanTypeAnnotation = isBooleanTypeAnnotation;
@@ -193,7 +193,7 @@ var require_generated = __commonJS({
     exports.isForXStatement = isForXStatement;
     exports.isFunction = isFunction;
     exports.isFunctionDeclaration = isFunctionDeclaration2;
-    exports.isFunctionExpression = isFunctionExpression3;
+    exports.isFunctionExpression = isFunctionExpression2;
     exports.isFunctionParameter = isFunctionParameter;
     exports.isFunctionParent = isFunctionParent;
     exports.isFunctionTypeAnnotation = isFunctionTypeAnnotation;
@@ -288,7 +288,7 @@ var require_generated = __commonJS({
     exports.isRegexLiteral = isRegexLiteral;
     exports.isRestElement = isRestElement;
     exports.isRestProperty = isRestProperty;
-    exports.isReturnStatement = isReturnStatement3;
+    exports.isReturnStatement = isReturnStatement2;
     exports.isScopable = isScopable;
     exports.isSequenceExpression = isSequenceExpression2;
     exports.isSpreadElement = isSpreadElement;
@@ -440,7 +440,7 @@ var require_generated = __commonJS({
       if (node.type !== "DirectiveLiteral") return false;
       return opts == null || (0, _shallowEqual.default)(node, opts);
     }
-    function isBlockStatement3(node, opts) {
+    function isBlockStatement2(node, opts) {
       if (!node) return false;
       if (node.type !== "BlockStatement") return false;
       return opts == null || (0, _shallowEqual.default)(node, opts);
@@ -510,7 +510,7 @@ var require_generated = __commonJS({
       if (node.type !== "FunctionDeclaration") return false;
       return opts == null || (0, _shallowEqual.default)(node, opts);
     }
-    function isFunctionExpression3(node, opts) {
+    function isFunctionExpression2(node, opts) {
       if (!node) return false;
       if (node.type !== "FunctionExpression") return false;
       return opts == null || (0, _shallowEqual.default)(node, opts);
@@ -595,7 +595,7 @@ var require_generated = __commonJS({
       if (node.type !== "RestElement") return false;
       return opts == null || (0, _shallowEqual.default)(node, opts);
     }
-    function isReturnStatement3(node, opts) {
+    function isReturnStatement2(node, opts) {
       if (!node) return false;
       if (node.type !== "ReturnStatement") return false;
       return opts == null || (0, _shallowEqual.default)(node, opts);
@@ -675,7 +675,7 @@ var require_generated = __commonJS({
       if (node.type !== "ArrayPattern") return false;
       return opts == null || (0, _shallowEqual.default)(node, opts);
     }
-    function isArrowFunctionExpression3(node, opts) {
+    function isArrowFunctionExpression2(node, opts) {
       if (!node) return false;
       if (node.type !== "ArrowFunctionExpression") return false;
       return opts == null || (0, _shallowEqual.default)(node, opts);
@@ -14117,109 +14117,43 @@ function isChildrenExpression(n) {
   }
   return false;
 }
-function extractExpressionInfo(expr) {
-  if (t.isCallExpression(expr)) {
-    if (t.isMemberExpression(expr.callee) && t.isIdentifier(expr.callee.property)) {
-      const methodName = expr.callee.property.name;
-      if (["map", "filter", "flatMap", "reduce", "forEach"].includes(methodName)) {
-        let variable = "VAR";
-        if (t.isIdentifier(expr.callee.object)) {
-          variable = expr.callee.object.name;
-        } else if (t.isMemberExpression(expr.callee.object) && t.isIdentifier(expr.callee.object.property)) {
-          variable = expr.callee.object.property.name;
-        }
-        return {
-          context: `${variable}.${methodName}()`,
-          variable
-        };
-      }
-    }
-  }
-  if (t.isConditionalExpression(expr)) {
-    let variable = "VAR";
-    if (t.isIdentifier(expr.test)) {
-      variable = expr.test.name;
-    }
-    return {
-      context: `${variable} ? (...) : (...)`,
-      variable
-    };
-  }
-  if (t.isLogicalExpression(expr)) {
-    let variable = "VAR";
-    if (t.isIdentifier(expr.left)) {
-      variable = expr.left.name;
-    }
-    const operator = expr.operator === "&&" ? "&&" : "||";
-    return {
-      context: `${variable} ${operator} (...)`,
-      variable
-    };
-  }
-  return null;
-}
-function collectJsxFromExpression(expr, out, expressionContext) {
+function collectJsxFromExpression(expr, out) {
   if (!expr) return;
   if (t.isJSXElement(expr) || t.isJSXFragment(expr)) {
     out.push(expr);
     return;
   }
-  if (t.isParenthesizedExpression(expr)) return collectJsxFromExpression(expr.expression, out, expressionContext);
+  if (t.isParenthesizedExpression(expr)) return collectJsxFromExpression(expr.expression, out);
   if (t.isSequenceExpression(expr)) {
-    for (const e of expr.expressions) collectJsxFromExpression(e, out, expressionContext);
+    for (const e of expr.expressions) collectJsxFromExpression(e, out);
     return;
   }
   if (t.isLogicalExpression(expr)) {
-    collectJsxFromExpression(expr.left, out, expressionContext);
-    collectJsxFromExpression(expr.right, out, expressionContext);
+    collectJsxFromExpression(expr.left, out);
+    collectJsxFromExpression(expr.right, out);
     return;
   }
   if (t.isConditionalExpression(expr)) {
-    collectJsxFromExpression(expr.consequent, out, expressionContext);
-    collectJsxFromExpression(expr.alternate, out, expressionContext);
+    collectJsxFromExpression(expr.consequent, out);
+    collectJsxFromExpression(expr.alternate, out);
     return;
   }
   if (t.isCallExpression(expr)) {
-    if (t.isMemberExpression(expr.callee) && t.isIdentifier(expr.callee.property)) {
-      const methodName = expr.callee.property.name;
-      if (["map", "filter", "flatMap", "reduce", "forEach"].includes(methodName)) {
-        for (const arg of expr.arguments) {
-          if (t.isArrowFunctionExpression(arg) || t.isFunctionExpression(arg)) {
-            if (t.isBlockStatement(arg.body)) {
-              for (const stmt of arg.body.body) {
-                if (t.isReturnStatement(stmt) && stmt.argument) {
-                  collectJsxFromExpression(stmt.argument, out, expressionContext);
-                }
-              }
-            } else {
-              collectJsxFromExpression(arg.body, out, expressionContext);
-            }
-          } else if (t.isExpression(arg)) {
-            collectJsxFromExpression(arg, out, expressionContext);
-          }
-        }
-      } else {
-        for (const arg of expr.arguments) {
-          if (t.isExpression(arg)) collectJsxFromExpression(arg, out, expressionContext);
-        }
-      }
-    } else {
-      for (const arg of expr.arguments) {
-        if (t.isExpression(arg)) collectJsxFromExpression(arg, out, expressionContext);
-      }
+    for (const arg of expr.arguments) {
+      if (t.isExpression(arg)) collectJsxFromExpression(arg, out);
     }
     return;
   }
   if (t.isArrayExpression(expr)) {
     for (const el of expr.elements) {
-      if (t.isExpression(el)) collectJsxFromExpression(el, out, expressionContext);
+      if (t.isExpression(el)) collectJsxFromExpression(el, out);
     }
     return;
   }
   if (t.isObjectExpression(expr)) {
     for (const prop of expr.properties) {
       if (t.isObjectProperty(prop) && t.isExpression(prop.value)) {
-        collectJsxFromExpression(prop.value, out, expressionContext);
+        collectJsxFromExpression(prop.value, out);
       }
     }
     return;
@@ -14239,16 +14173,7 @@ function childrenFromJsx(node) {
         out.push({ slot: "children" });
         continue;
       }
-      const exprInfo = extractExpressionInfo(expr);
-      const jsxElements = [];
-      collectJsxFromExpression(expr, jsxElements);
-      if (exprInfo && jsxElements.length > 0) {
-        for (const jsxEl of jsxElements) {
-          out.push({ jsx: jsxEl, expressionContext: exprInfo.context });
-        }
-      } else {
-        out.push(...jsxElements);
-      }
+      collectJsxFromExpression(expr, out);
       continue;
     }
   }
@@ -14260,11 +14185,6 @@ function jsxAstToTree(ast) {
     for (const child of childrenFromJsx(ast)) {
       if ("slot" in child) {
         out.push({ name: CHILDREN_SLOT, children: [] });
-      } else if ("jsx" in child) {
-        const trees = jsxAstToTree(child.jsx);
-        for (const tree of trees) {
-          out.push({ ...tree, expressionContext: child.expressionContext });
-        }
       } else {
         out.push(...jsxAstToTree(child));
       }
@@ -14273,16 +14193,9 @@ function jsxAstToTree(ast) {
   }
   const name = jsxNameToString(ast.openingElement.name);
   const childrenAst = childrenFromJsx(ast);
-  const children = childrenAst.flatMap((c) => {
-    if ("slot" in c) {
-      return [{ name: CHILDREN_SLOT, children: [] }];
-    } else if ("jsx" in c) {
-      const trees = jsxAstToTree(c.jsx);
-      return trees.map((tree) => ({ ...tree, expressionContext: c.expressionContext }));
-    } else {
-      return jsxAstToTree(c);
-    }
-  });
+  const children = childrenAst.flatMap(
+    (c) => "slot" in c ? [{ name: CHILDREN_SLOT, children: [] }] : jsxAstToTree(c)
+  );
   return [{ name, children }];
 }
 function coerceSingleRoot(nodes) {
@@ -14461,7 +14374,7 @@ async function parseReactFile(opts) {
 
 // src/buildTree.ts
 function cloneNode(n) {
-  return { name: n.name, children: n.children.map(cloneNode), expandedFromFile: n.expandedFromFile, expressionContext: n.expressionContext };
+  return { name: n.name, children: n.children.map(cloneNode), expandedFromFile: n.expandedFromFile };
 }
 function spliceChildrenSlot(tree, slotChildren) {
   if (tree.name === CHILDREN_SLOT) {
@@ -14563,15 +14476,11 @@ function renderNode(n, indent, out, opts) {
     return;
   }
   const meta = opts.showExpandedFrom && n.expandedFromFile ? pc.dim(`  // ${n.expandedFromFile}`) : "";
-  let displayName = n.name;
-  if (n.expressionContext) {
-    displayName += ` ${n.expressionContext}`;
-  }
   if (!n.children.length) {
-    out.push(`${pad}<${displayName} />${meta}`);
+    out.push(`${pad}<${n.name} />${meta}`);
     return;
   }
-  out.push(`${pad}<${displayName}>${meta}`);
+  out.push(`${pad}<${n.name}>${meta}`);
   for (const c of n.children) renderNode(c, indent + 1, out, opts);
   out.push(`${pad}</${n.name}>`);
 }
@@ -14610,20 +14519,16 @@ function renderDomLines(root, collapsedIds, pathIds = [], indentLevel = 0, lines
   const isCollapsed = toggleable ? collapsedIds.has(id) : false;
   const indent = " ".repeat(indentLevel * 4);
   const arrow = toggleable ? " =>" : "";
-  let displayName = root.name;
-  if (root.expressionContext) {
-    displayName += ` ${root.expressionContext}`;
-  }
   if (!root.children.length || toggleable && isCollapsed) {
     lines.push({
-      text: `${indent}<${displayName} />${arrow}`,
+      text: `${indent}<${root.name} />${arrow}`,
       nodeId: id,
       canToggle: toggleable
     });
     return lines;
   }
   lines.push({
-    text: `${indent}<${displayName}>${arrow}`,
+    text: `${indent}<${root.name}>${arrow}`,
     nodeId: id,
     canToggle: toggleable
   });

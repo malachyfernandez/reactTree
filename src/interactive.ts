@@ -1,52 +1,73 @@
 import blessed from "blessed";
-// blessed-contrib is CJS; keep it generic for ESM builds
-import contribImport from "blessed-contrib";
 import pc from "picocolors";
 import type { JsxTreeNode } from "./types.js";
 
-type Contrib = typeof import("blessed-contrib");
-const contrib: Contrib =
-  (contribImport as unknown as { default?: Contrib }).default ?? (contribImport as unknown as Contrib);
-
-type TreeNodeData = {
-  name: string;
-  id: string;
-  extended?: boolean;
-  children?: Record<string, TreeNodeData>;
+type Line = {
+  text: string;
+  nodeId?: string;
+  canToggle?: boolean;
 };
 
 function nodeIdPath(pathIds: string[]): string {
   return pathIds.join("/");
 }
 
-function buildTreeData(
-  root: JsxTreeNode,
-  collapsedIds: Set<string>,
-  pathIds: string[] = []
-): TreeNodeData {
+function isToggleable(node: JsxTreeNode): boolean {
+  // Toggle ONLY components expanded from separate files (shown with =>)
+  return !!node.expandedFromFile;
+}
+
+function collectToggleables(root: JsxTreeNode, pathIds: string[] = [], out: Set<string>) {
   const myPath = [...pathIds, root.name];
   const id = nodeIdPath(myPath);
-
-  const kids: Record<string, TreeNodeData> = {};
+  if (isToggleable(root)) out.add(id);
   for (let i = 0; i < root.children.length; i++) {
     const c = root.children[i];
-    // disambiguate identical sibling names
     const key = `${c.name}#${i + 1}`;
-    kids[key] = buildTreeData(c, collapsedIds, [...myPath, key]);
+    collectToggleables(c, [...myPath, key], out);
+  }
+}
+
+function renderDomLines(
+  root: JsxTreeNode,
+  collapsedIds: Set<string>,
+  pathIds: string[] = [],
+  indentLevel = 0,
+  lines: Line[] = []
+): Line[] {
+  const myPath = [...pathIds, root.name];
+  const id = nodeIdPath(myPath);
+  const toggleable = isToggleable(root);
+  const isCollapsed = toggleable ? collapsedIds.has(id) : false;
+
+  const indent = " ".repeat(indentLevel * 4);
+  const arrow = toggleable ? " =>" : "";
+
+  // If collapsed (and toggleable), render a self-closing line exactly like DOM
+  if (!root.children.length || (toggleable && isCollapsed)) {
+    lines.push({
+      text: `${indent}<${root.name} />${arrow}`,
+      nodeId: id,
+      canToggle: toggleable
+    });
+    return lines;
   }
 
-  const hasChildren = Object.keys(kids).length > 0;
-  const isCollapsed = collapsedIds.has(id);
+  // Expanded
+  lines.push({
+    text: `${indent}<${root.name}>${arrow}`,
+    nodeId: id,
+    canToggle: toggleable
+  });
 
-  const indicator = hasChildren ? (isCollapsed ? pc.dim("+ ") : pc.dim("- ")) : pc.dim("  ");
-  const label = hasChildren ? `${indicator}<${root.name}>` : `${indicator}<${root.name} />`;
+  for (let i = 0; i < root.children.length; i++) {
+    const c = root.children[i];
+    const key = `${c.name}#${i + 1}`;
+    renderDomLines(c, collapsedIds, [...myPath, key], indentLevel + 1, lines);
+  }
 
-  return {
-    name: label,
-    id,
-    extended: hasChildren ? !isCollapsed : undefined,
-    children: hasChildren ? kids : undefined
-  };
+  lines.push({ text: `${indent}</${root.name}>` });
+  return lines;
 }
 
 export type InteractiveController = {
@@ -63,6 +84,7 @@ export function startInteractiveUI(opts: {
 }): InteractiveController {
   const collapsedIds = opts.collapsedIds ?? new Set<string>();
   let lastRoot = opts.root;
+  let lastLines: Line[] = [];
 
   const screen = blessed.screen({
     smartCSR: true,
@@ -72,39 +94,65 @@ export function startInteractiveUI(opts: {
     mouse: !!opts.enableMouse
   });
 
-  const grid = new contrib.grid({ rows: 12, cols: 12, screen });
-
-  const header = grid.set(0, 0, 2, 12, blessed.box, {
+  const header = blessed.box({
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: 3,
     tags: false,
-    content: `${pc.bold(pc.cyan(opts.title))}\n${pc.dim(opts.metaLine)}\n${pc.dim("Keys: ↑↓ navigate  Enter/Space toggle  q quit")}`,
+    content: `${pc.bold(pc.cyan(opts.title))}\n${pc.dim(opts.metaLine)}\n${pc.dim(
+      "Keys: ↑↓ navigate  Enter/Space/+ toggle  q quit"
+    )}`,
     style: { fg: "white" }
-  }) as blessed.Widgets.BoxElement;
+  });
 
-  const tree = grid.set(2, 0, 10, 12, contrib.tree, {
-    label: "JSX Tree",
-    fg: "white",
-    border: { type: "line", fg: "cyan" }
-  }) as unknown as import("blessed-contrib").Widgets.TreeElement;
+  const list = blessed.list({
+    top: 3,
+    left: 0,
+    width: "100%",
+    height: "100%-3",
+    keys: true,
+    mouse: !!opts.enableMouse,
+    tags: false,
+    border: { type: "line" },
+    style: {
+      border: { fg: "cyan" },
+      selected: { bg: "blue", fg: "white" },
+      item: { fg: "white" }
+    },
+    scrollbar: { ch: " ", track: { bg: "gray" }, style: { bg: "white" } }
+  });
+
+  screen.append(header);
+  screen.append(list);
+
+  const initCollapseDefaults = (root: JsxTreeNode) => {
+    // Every toggleable node is collapsed by default
+    const allToggleables = new Set<string>();
+    collectToggleables(root, [], allToggleables);
+    for (const id of allToggleables) {
+      if (!collapsedIds.has(id)) collapsedIds.add(id);
+    }
+  };
 
   const setData = (root: JsxTreeNode) => {
     lastRoot = root;
-    const data = buildTreeData(root, collapsedIds);
-    tree.setData(data as unknown as any);
+    initCollapseDefaults(root);
+    lastLines = renderDomLines(root, collapsedIds);
+    list.setItems(lastLines.map((l) => l.text));
+    if (list.selected == null) list.select(0);
     screen.render();
   };
 
   setData(opts.root);
 
   function toggleSelected() {
-    const sel: any = (tree as any).selected;
-    if (!sel) return;
-    const id: string | undefined = sel.id;
-    const children = sel.children;
-    const hasChildren = children && Object.keys(children).length > 0;
-    if (!id || !hasChildren) return;
-
-    if (collapsedIds.has(id)) collapsedIds.delete(id);
-    else collapsedIds.add(id);
+    const idx = list.selected ?? 0;
+    const line = lastLines[idx];
+    if (!line?.canToggle || !line.nodeId) return;
+    if (collapsedIds.has(line.nodeId)) collapsedIds.delete(line.nodeId);
+    else collapsedIds.add(line.nodeId);
+    setData(lastRoot);
   }
 
   // Key bindings
@@ -112,25 +160,16 @@ export function startInteractiveUI(opts: {
     screen.destroy();
     process.exit(0);
   });
-  screen.key(["enter", "space"], () => {
-    toggleSelected();
-    setData(lastRoot);
-  });
-
-  // Mouse click to toggle
-  (tree as any).on("select", () => {
-    // no-op; selection highlight is enough
-  });
-  (tree as any).on("click", () => {
-    if (!opts.enableMouse) return;
-    toggleSelected();
-    setData(lastRoot);
-  });
+  // Bind on list to avoid blessed-contrib tree default behavior (jumping to top)
+  list.key(["enter", "space", "+"], () => toggleSelected());
+  if (opts.enableMouse) list.on("select", () => toggleSelected());
 
   return {
     updateTree: (root, metaLine) => {
       header.setContent(
-        `${pc.bold(pc.cyan(opts.title))}\n${pc.dim(metaLine)}\n${pc.dim("Keys: ↑↓ navigate  Enter/Space toggle  q quit")}`
+        `${pc.bold(pc.cyan(opts.title))}\n${pc.dim(metaLine)}\n${pc.dim(
+          "Keys: ↑↓ navigate  Enter/Space/+ toggle  q quit"
+        )}`
       );
       setData(root);
     },

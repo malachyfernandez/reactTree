@@ -47,7 +47,7 @@ node dist/cli.js path/to/index.tsx --interactive --mouse
 ## Interactive controls
 
 - **Up/Down**: move selection
-- **Enter / Space**: expand/collapse selected node
+- **Enter / Space / +**: expand/collapse selected node
 - **q** or **Ctrl+C**: quit
 - **Mouse (optional)**: click to toggle (enable with `--mouse`)
 
@@ -57,3 +57,10 @@ node dist/cli.js path/to/index.tsx --interactive --mouse
 - Will **not** expand any import that resolves **outside** the starting file’s folder (tree only goes downward)
 - `--ignore` folders are relative to the starting file’s folder
 - Watch mode is **focused**: it watches only the start file + any component files that are currently part of the expanded tree (prevents `EMFILE` on large projects)
+
+## Interactive rendering behavior
+
+- The interactive view renders **DOM-style JSX** with **4-space indentation**
+- Only components that expand from a **separate file** are toggleable, and are marked with `=>`
+- All toggleable components start **collapsed by default**
+- Expanding a parent does **not** auto-expand nested toggleable components

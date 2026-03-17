@@ -6,6 +6,7 @@ export type JsxTreeNode = {
     type: 'map' | 'filter' | 'ternary' | 'logical' | 'call' | 'other';
     variable?: string;
     operation?: string;
+    hasAlternate?: boolean;
   };
 };
 

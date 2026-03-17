@@ -10,12 +10,17 @@ export type BuildResult = {
 };
 
 function cloneNode(n: JsxTreeNode): JsxTreeNode {
-  return { name: n.name, children: n.children.map(cloneNode), expandedFromFile: n.expandedFromFile };
+  return { 
+    name: n.name, 
+    children: n.children.map(cloneNode), 
+    expandedFromFile: n.expandedFromFile,
+    dynamicExpression: n.dynamicExpression 
+  };
 }
 
 function spliceChildrenSlot(tree: JsxTreeNode, slotChildren: JsxTreeNode[]): JsxTreeNode {
   if (tree.name === CHILDREN_SLOT) {
-    return { name: CHILDREN_SLOT, children: slotChildren.map(cloneNode) };
+    return { name: CHILDREN_SLOT, children: slotChildren.map(cloneNode), dynamicExpression: tree.dynamicExpression };
   }
   return { ...tree, children: tree.children.map((c) => spliceChildrenSlot(c, slotChildren)) };
 }
@@ -24,11 +29,11 @@ function pruneEmptySlots(node: JsxTreeNode): JsxTreeNode | null {
   if (node.name === CHILDREN_SLOT) {
     const kids = node.children.map(pruneEmptySlots).filter(Boolean) as JsxTreeNode[];
     if (!kids.length) return null;
-    return { ...node, children: kids };
+    return { ...node, children: kids, dynamicExpression: node.dynamicExpression };
   }
 
   const prunedKids = node.children.map(pruneEmptySlots).filter(Boolean) as JsxTreeNode[];
-  return { ...node, children: prunedKids };
+  return { ...node, children: prunedKids, dynamicExpression: node.dynamicExpression };
 }
 
 async function expandNode(opts: BuildOptions, node: JsxTreeNode, importMap: Map<string, string>, ctx: {

@@ -43,6 +43,50 @@ function renderDomLines(
   const indent = " ".repeat(indentLevel * 4);
   const arrow = toggleable ? " =>" : "";
 
+  // Handle dynamic expressions (render as plain text, not JSX)
+  if (root.dynamicExpression) {
+    const dynamicInfo = root.dynamicExpression;
+    const variableName = dynamicInfo.variable || 'VAR';
+    const operation = dynamicInfo.operation || '';
+    
+    let expressionText = '';
+    if (dynamicInfo.type === 'map' || dynamicInfo.type === 'filter') {
+      expressionText = `${variableName}.${operation} (`;
+    } else if (dynamicInfo.type === 'ternary') {
+      expressionText = `${variableName} ? (`;
+    } else if (dynamicInfo.type === 'logical') {
+      expressionText = `${variableName} ${operation} (`;
+    } else {
+      expressionText = variableName;
+    }
+
+    lines.push({
+      text: `${indent}${expressionText}`,
+      nodeId: id,
+      canToggle: toggleable
+    });
+
+    if (!isCollapsed && root.children.length > 0) {
+      for (let i = 0; i < root.children.length; i++) {
+        const c = root.children[i];
+        const key = `${c.name}#${i + 1}`;
+        renderDomLines(c, collapsedIds, [...myPath, key], indentLevel + 1, lines);
+      }
+      
+      // Close the expression
+      if (dynamicInfo.type === 'map' || dynamicInfo.type === 'filter') {
+        lines.push({ text: `${indent})` });
+      } else if (dynamicInfo.type === 'ternary') {
+        lines.push({ text: `${indent}) : (` });
+        lines.push({ text: `${indent}  <!-- JSX for alternate branch -->` });
+        lines.push({ text: `${indent})` });
+      } else if (dynamicInfo.type === 'logical') {
+        lines.push({ text: `${indent})` });
+      }
+    }
+    return lines;
+  }
+
   // If collapsed (and toggleable), render a self-closing line exactly like DOM
   if (!root.children.length || (toggleable && isCollapsed)) {
     lines.push({

@@ -29,7 +29,7 @@ function extractVariableName(node: Node): string | undefined {
   return undefined;
 }
 
-function getDynamicExpressionType(expr: Node): { type: 'map' | 'filter' | 'ternary' | 'logical' | 'call' | 'other', variable?: string, operation?: string } {
+function getDynamicExpressionType(expr: Node): { type: 'map' | 'filter' | 'ternary' | 'logical' | 'call' | 'other', variable?: string, operation?: string, hasAlternate?: boolean } {
   if (t.isCallExpression(expr)) {
     const callee = expr.callee;
     if (t.isMemberExpression(callee)) {
@@ -53,7 +53,7 @@ function getDynamicExpressionType(expr: Node): { type: 'map' | 'filter' | 'terna
   return { type: 'other' };
 }
 
-function collectJsxFromExpression(expr: Node | null | undefined, out: Array<t.JSXElement | t.JSXFragment>): { dynamicInfo?: { type: 'map' | 'filter' | 'ternary' | 'logical' | 'call' | 'other', variable?: string, operation?: string }, jsxCount: number } {
+function collectJsxFromExpression(expr: Node | null | undefined, out: Array<t.JSXElement | t.JSXFragment>): { dynamicInfo?: { type: 'map' | 'filter' | 'ternary' | 'logical' | 'call' | 'other', variable?: string, operation?: string, hasAlternate?: boolean }, jsxCount: number } {
   if (!expr) return { jsxCount: 0 };
 
   if (t.isJSXElement(expr) || t.isJSXFragment(expr)) {
@@ -78,7 +78,7 @@ function collectJsxFromExpression(expr: Node | null | undefined, out: Array<t.JS
   if (t.isConditionalExpression(expr)) {
     const consequentResult = collectJsxFromExpression(expr.consequent as unknown as Node, out);
     const alternateResult = collectJsxFromExpression(expr.alternate as unknown as Node, out);
-    return { dynamicInfo: getDynamicExpressionType(expr), jsxCount: consequentResult.jsxCount + alternateResult.jsxCount };
+    return { dynamicInfo: { ...getDynamicExpressionType(expr), hasAlternate: true }, jsxCount: consequentResult.jsxCount + alternateResult.jsxCount };
   }
   if (t.isCallExpression(expr)) {
     let totalJsxCount = 0;
@@ -132,7 +132,7 @@ function collectJsxFromExpression(expr: Node | null | undefined, out: Array<t.JS
   return { jsxCount: 0 };
 }
 
-type ChildItem = t.JSXElement | t.JSXFragment | { slot: "children" } | { dynamicExpression: { type: 'map' | 'filter' | 'ternary' | 'logical' | 'call' | 'other', variable?: string, operation?: string }, children: Array<t.JSXElement | t.JSXFragment> };
+type ChildItem = t.JSXElement | t.JSXFragment | { slot: "children" } | { dynamicExpression: { type: 'map' | 'filter' | 'ternary' | 'logical' | 'call' | 'other', variable?: string, operation?: string, hasAlternate?: boolean }, children: Array<t.JSXElement | t.JSXFragment> };
 
 function childrenFromJsx(node: t.JSXElement | t.JSXFragment): ChildItem[] {
   const rawChildren = t.isJSXElement(node) ? node.children : node.children;

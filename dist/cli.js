@@ -14172,7 +14172,7 @@ function collectJsxFromExpression(expr, out) {
   if (t.isConditionalExpression(expr)) {
     const consequentResult = collectJsxFromExpression(expr.consequent, out);
     const alternateResult = collectJsxFromExpression(expr.alternate, out);
-    return { dynamicInfo: getDynamicExpressionType(expr), jsxCount: consequentResult.jsxCount + alternateResult.jsxCount };
+    return { dynamicInfo: { ...getDynamicExpressionType(expr), hasAlternate: true }, jsxCount: consequentResult.jsxCount + alternateResult.jsxCount };
   }
   if (t.isCallExpression(expr)) {
     let totalJsxCount = 0;
@@ -14480,11 +14480,16 @@ async function parseReactFile(opts) {
 
 // src/buildTree.ts
 function cloneNode(n) {
-  return { name: n.name, children: n.children.map(cloneNode), expandedFromFile: n.expandedFromFile };
+  return {
+    name: n.name,
+    children: n.children.map(cloneNode),
+    expandedFromFile: n.expandedFromFile,
+    dynamicExpression: n.dynamicExpression
+  };
 }
 function spliceChildrenSlot(tree, slotChildren) {
   if (tree.name === CHILDREN_SLOT) {
-    return { name: CHILDREN_SLOT, children: slotChildren.map(cloneNode) };
+    return { name: CHILDREN_SLOT, children: slotChildren.map(cloneNode), dynamicExpression: tree.dynamicExpression };
   }
   return { ...tree, children: tree.children.map((c) => spliceChildrenSlot(c, slotChildren)) };
 }
@@ -14492,10 +14497,10 @@ function pruneEmptySlots(node) {
   if (node.name === CHILDREN_SLOT) {
     const kids = node.children.map(pruneEmptySlots).filter(Boolean);
     if (!kids.length) return null;
-    return { ...node, children: kids };
+    return { ...node, children: kids, dynamicExpression: node.dynamicExpression };
   }
   const prunedKids = node.children.map(pruneEmptySlots).filter(Boolean);
-  return { ...node, children: prunedKids };
+  return { ...node, children: prunedKids, dynamicExpression: node.dynamicExpression };
 }
 async function expandNode(opts, node, importMap, ctx) {
   const maybeFile = importMap.get(node.name);
@@ -14581,6 +14586,35 @@ function renderNode(n, indent, out, opts) {
     for (const c of n.children) renderNode(c, indent, out, opts);
     return;
   }
+  if (n.dynamicExpression) {
+    const dynamicInfo = n.dynamicExpression;
+    const variableName = dynamicInfo.variable || "VAR";
+    const operation = dynamicInfo.operation || "";
+    let expressionText = "";
+    if (dynamicInfo.type === "map" || dynamicInfo.type === "filter") {
+      expressionText = `${variableName}.${operation} (`;
+    } else if (dynamicInfo.type === "ternary") {
+      expressionText = `${variableName} ? (`;
+    } else if (dynamicInfo.type === "logical") {
+      expressionText = `${variableName} ${operation} (`;
+    } else {
+      expressionText = variableName;
+    }
+    out.push(`${pad}${expressionText}`);
+    if (n.children.length > 0) {
+      for (const c of n.children) renderNode(c, indent + 1, out, opts);
+      if (dynamicInfo.type === "map" || dynamicInfo.type === "filter") {
+        out.push(`${pad})`);
+      } else if (dynamicInfo.type === "ternary") {
+        out.push(`${pad}) : (`);
+        out.push(`${pad}  <!-- JSX for alternate branch -->`);
+        out.push(`${pad})`);
+      } else if (dynamicInfo.type === "logical") {
+        out.push(`${pad})`);
+      }
+    }
+    return;
+  }
   const meta = opts.showExpandedFrom && n.expandedFromFile ? pc.dim(`  // ${n.expandedFromFile}`) : "";
   if (!n.children.length) {
     out.push(`${pad}<${n.name} />${meta}`);
@@ -14625,6 +14659,43 @@ function renderDomLines(root, collapsedIds, pathIds = [], indentLevel = 0, lines
   const isCollapsed = toggleable ? collapsedIds.has(id) : false;
   const indent = " ".repeat(indentLevel * 4);
   const arrow = toggleable ? " =>" : "";
+  if (root.dynamicExpression) {
+    const dynamicInfo = root.dynamicExpression;
+    const variableName = dynamicInfo.variable || "VAR";
+    const operation = dynamicInfo.operation || "";
+    let expressionText = "";
+    if (dynamicInfo.type === "map" || dynamicInfo.type === "filter") {
+      expressionText = `${variableName}.${operation} (`;
+    } else if (dynamicInfo.type === "ternary") {
+      expressionText = `${variableName} ? (`;
+    } else if (dynamicInfo.type === "logical") {
+      expressionText = `${variableName} ${operation} (`;
+    } else {
+      expressionText = variableName;
+    }
+    lines.push({
+      text: `${indent}${expressionText}`,
+      nodeId: id,
+      canToggle: toggleable
+    });
+    if (!isCollapsed && root.children.length > 0) {
+      for (let i = 0; i < root.children.length; i++) {
+        const c = root.children[i];
+        const key = `${c.name}#${i + 1}`;
+        renderDomLines(c, collapsedIds, [...myPath, key], indentLevel + 1, lines);
+      }
+      if (dynamicInfo.type === "map" || dynamicInfo.type === "filter") {
+        lines.push({ text: `${indent})` });
+      } else if (dynamicInfo.type === "ternary") {
+        lines.push({ text: `${indent}) : (` });
+        lines.push({ text: `${indent}  <!-- JSX for alternate branch -->` });
+        lines.push({ text: `${indent})` });
+      } else if (dynamicInfo.type === "logical") {
+        lines.push({ text: `${indent})` });
+      }
+    }
+    return lines;
+  }
   if (!root.children.length || toggleable && isCollapsed) {
     lines.push({
       text: `${indent}<${root.name} />${arrow}`,

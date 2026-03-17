@@ -24,6 +24,42 @@ function renderNode(n: JsxTreeNode, indent: number, out: string[], opts: RenderO
     return;
   }
 
+  // Handle dynamic expressions (render as plain text, not JSX)
+  if (n.dynamicExpression) {
+    const dynamicInfo = n.dynamicExpression;
+    const variableName = dynamicInfo.variable || 'VAR';
+    const operation = dynamicInfo.operation || '';
+    
+    let expressionText = '';
+    if (dynamicInfo.type === 'map' || dynamicInfo.type === 'filter') {
+      expressionText = `${variableName}.${operation} (`;
+    } else if (dynamicInfo.type === 'ternary') {
+      expressionText = `${variableName} ? (`;
+    } else if (dynamicInfo.type === 'logical') {
+      expressionText = `${variableName} ${operation} (`;
+    } else {
+      expressionText = variableName;
+    }
+
+    out.push(`${pad}${expressionText}`);
+    
+    if (n.children.length > 0) {
+      for (const c of n.children) renderNode(c, indent + 1, out, opts);
+      
+      // Close the expression
+      if (dynamicInfo.type === 'map' || dynamicInfo.type === 'filter') {
+        out.push(`${pad})`);
+      } else if (dynamicInfo.type === 'ternary') {
+        out.push(`${pad}) : (`);
+        out.push(`${pad}  <!-- JSX for alternate branch -->`);
+        out.push(`${pad})`);
+      } else if (dynamicInfo.type === 'logical') {
+        out.push(`${pad})`);
+      }
+    }
+    return;
+  }
+
   const meta =
     opts.showExpandedFrom && n.expandedFromFile ? pc.dim(`  // ${n.expandedFromFile}`) : "";
 

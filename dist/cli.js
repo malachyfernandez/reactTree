@@ -106,7 +106,7 @@ var require_generated = __commonJS({
     exports.isArrayExpression = isArrayExpression2;
     exports.isArrayPattern = isArrayPattern;
     exports.isArrayTypeAnnotation = isArrayTypeAnnotation;
-    exports.isArrowFunctionExpression = isArrowFunctionExpression2;
+    exports.isArrowFunctionExpression = isArrowFunctionExpression3;
     exports.isAssignmentExpression = isAssignmentExpression;
     exports.isAssignmentPattern = isAssignmentPattern;
     exports.isAwaitExpression = isAwaitExpression;
@@ -116,7 +116,7 @@ var require_generated = __commonJS({
     exports.isBindExpression = isBindExpression;
     exports.isBlock = isBlock;
     exports.isBlockParent = isBlockParent;
-    exports.isBlockStatement = isBlockStatement2;
+    exports.isBlockStatement = isBlockStatement3;
     exports.isBooleanLiteral = isBooleanLiteral;
     exports.isBooleanLiteralTypeAnnotation = isBooleanLiteralTypeAnnotation;
     exports.isBooleanTypeAnnotation = isBooleanTypeAnnotation;
@@ -288,7 +288,7 @@ var require_generated = __commonJS({
     exports.isRegexLiteral = isRegexLiteral;
     exports.isRestElement = isRestElement;
     exports.isRestProperty = isRestProperty;
-    exports.isReturnStatement = isReturnStatement2;
+    exports.isReturnStatement = isReturnStatement3;
     exports.isScopable = isScopable;
     exports.isSequenceExpression = isSequenceExpression2;
     exports.isSpreadElement = isSpreadElement;
@@ -296,7 +296,7 @@ var require_generated = __commonJS({
     exports.isStandardized = isStandardized;
     exports.isStatement = isStatement;
     exports.isStaticBlock = isStaticBlock;
-    exports.isStringLiteral = isStringLiteral;
+    exports.isStringLiteral = isStringLiteral2;
     exports.isStringLiteralTypeAnnotation = isStringLiteralTypeAnnotation;
     exports.isStringTypeAnnotation = isStringTypeAnnotation;
     exports.isSuper = isSuper;
@@ -440,7 +440,7 @@ var require_generated = __commonJS({
       if (node.type !== "DirectiveLiteral") return false;
       return opts == null || (0, _shallowEqual.default)(node, opts);
     }
-    function isBlockStatement2(node, opts) {
+    function isBlockStatement3(node, opts) {
       if (!node) return false;
       if (node.type !== "BlockStatement") return false;
       return opts == null || (0, _shallowEqual.default)(node, opts);
@@ -530,7 +530,7 @@ var require_generated = __commonJS({
       if (node.type !== "LabeledStatement") return false;
       return opts == null || (0, _shallowEqual.default)(node, opts);
     }
-    function isStringLiteral(node, opts) {
+    function isStringLiteral2(node, opts) {
       if (!node) return false;
       if (node.type !== "StringLiteral") return false;
       return opts == null || (0, _shallowEqual.default)(node, opts);
@@ -595,7 +595,7 @@ var require_generated = __commonJS({
       if (node.type !== "RestElement") return false;
       return opts == null || (0, _shallowEqual.default)(node, opts);
     }
-    function isReturnStatement2(node, opts) {
+    function isReturnStatement3(node, opts) {
       if (!node) return false;
       if (node.type !== "ReturnStatement") return false;
       return opts == null || (0, _shallowEqual.default)(node, opts);
@@ -675,7 +675,7 @@ var require_generated = __commonJS({
       if (node.type !== "ArrayPattern") return false;
       return opts == null || (0, _shallowEqual.default)(node, opts);
     }
-    function isArrowFunctionExpression2(node, opts) {
+    function isArrowFunctionExpression3(node, opts) {
       if (!node) return false;
       if (node.type !== "ArrowFunctionExpression") return false;
       return opts == null || (0, _shallowEqual.default)(node, opts);
@@ -14117,47 +14117,111 @@ function isChildrenExpression(n) {
   }
   return false;
 }
+function extractVariableName(node) {
+  if (t.isIdentifier(node)) return node.name;
+  if (t.isMemberExpression(node)) {
+    const obj = extractVariableName(node.object);
+    const prop = t.isIdentifier(node.property) ? node.property.name : t.isStringLiteral(node.property) ? node.property.value : void 0;
+    return obj && prop ? `${obj}.${prop}` : void 0;
+  }
+  return void 0;
+}
+function getDynamicExpressionType(expr) {
+  if (t.isCallExpression(expr)) {
+    const callee = expr.callee;
+    if (t.isMemberExpression(callee)) {
+      const method = t.isIdentifier(callee.property) ? callee.property.name : void 0;
+      const variable = extractVariableName(callee.object);
+      if (method && ["map", "filter", "reduce", "find", "some", "every", "forEach"].includes(method)) {
+        return { type: method, variable, operation: method };
+      }
+    }
+    return { type: "call" };
+  }
+  if (t.isConditionalExpression(expr)) {
+    const test = expr.test;
+    const variable = extractVariableName(test);
+    return { type: "ternary", variable, operation: "?:" };
+  }
+  if (t.isLogicalExpression(expr)) {
+    const variable = extractVariableName(expr.left);
+    return { type: "logical", variable, operation: expr.operator };
+  }
+  return { type: "other" };
+}
 function collectJsxFromExpression(expr, out) {
-  if (!expr) return;
+  if (!expr) return { jsxCount: 0 };
   if (t.isJSXElement(expr) || t.isJSXFragment(expr)) {
     out.push(expr);
-    return;
+    return { jsxCount: 1 };
   }
   if (t.isParenthesizedExpression(expr)) return collectJsxFromExpression(expr.expression, out);
   if (t.isSequenceExpression(expr)) {
-    for (const e of expr.expressions) collectJsxFromExpression(e, out);
-    return;
+    let totalJsxCount = 0;
+    for (const e of expr.expressions) {
+      const result = collectJsxFromExpression(e, out);
+      totalJsxCount += result.jsxCount;
+    }
+    return { jsxCount: totalJsxCount };
   }
   if (t.isLogicalExpression(expr)) {
-    collectJsxFromExpression(expr.left, out);
-    collectJsxFromExpression(expr.right, out);
-    return;
+    const leftResult = collectJsxFromExpression(expr.left, out);
+    const rightResult = collectJsxFromExpression(expr.right, out);
+    return { dynamicInfo: getDynamicExpressionType(expr), jsxCount: leftResult.jsxCount + rightResult.jsxCount };
   }
   if (t.isConditionalExpression(expr)) {
-    collectJsxFromExpression(expr.consequent, out);
-    collectJsxFromExpression(expr.alternate, out);
-    return;
+    const consequentResult = collectJsxFromExpression(expr.consequent, out);
+    const alternateResult = collectJsxFromExpression(expr.alternate, out);
+    return { dynamicInfo: getDynamicExpressionType(expr), jsxCount: consequentResult.jsxCount + alternateResult.jsxCount };
   }
   if (t.isCallExpression(expr)) {
+    let totalJsxCount = 0;
     for (const arg of expr.arguments) {
-      if (t.isExpression(arg)) collectJsxFromExpression(arg, out);
-    }
-    return;
-  }
-  if (t.isArrayExpression(expr)) {
-    for (const el of expr.elements) {
-      if (t.isExpression(el)) collectJsxFromExpression(el, out);
-    }
-    return;
-  }
-  if (t.isObjectExpression(expr)) {
-    for (const prop of expr.properties) {
-      if (t.isObjectProperty(prop) && t.isExpression(prop.value)) {
-        collectJsxFromExpression(prop.value, out);
+      if (t.isExpression(arg)) {
+        if (t.isArrowFunctionExpression(arg)) {
+          if (t.isExpression(arg.body)) {
+            const result = collectJsxFromExpression(arg.body, out);
+            totalJsxCount += result.jsxCount;
+          } else if (t.isBlockStatement(arg.body)) {
+            for (const statement of arg.body.body) {
+              if (t.isReturnStatement(statement) && t.isExpression(statement.argument)) {
+                const result = collectJsxFromExpression(statement.argument, out);
+                totalJsxCount += result.jsxCount;
+              }
+            }
+          }
+        } else {
+          const result = collectJsxFromExpression(arg, out);
+          totalJsxCount += result.jsxCount;
+        }
       }
     }
-    return;
+    if (totalJsxCount > 0) {
+      return { dynamicInfo: getDynamicExpressionType(expr), jsxCount: totalJsxCount };
+    }
+    return { jsxCount: 0 };
   }
+  if (t.isArrayExpression(expr)) {
+    let totalJsxCount = 0;
+    for (const el of expr.elements) {
+      if (t.isExpression(el)) {
+        const result = collectJsxFromExpression(el, out);
+        totalJsxCount += result.jsxCount;
+      }
+    }
+    return { jsxCount: totalJsxCount };
+  }
+  if (t.isObjectExpression(expr)) {
+    let totalJsxCount = 0;
+    for (const prop of expr.properties) {
+      if (t.isObjectProperty(prop) && t.isExpression(prop.value)) {
+        const result = collectJsxFromExpression(prop.value, out);
+        totalJsxCount += result.jsxCount;
+      }
+    }
+    return { jsxCount: totalJsxCount };
+  }
+  return { jsxCount: 0 };
 }
 function childrenFromJsx(node) {
   const rawChildren = t.isJSXElement(node) ? node.children : node.children;
@@ -14173,7 +14237,16 @@ function childrenFromJsx(node) {
         out.push({ slot: "children" });
         continue;
       }
-      collectJsxFromExpression(expr, out);
+      const jsxElements = [];
+      const result = collectJsxFromExpression(expr, jsxElements);
+      if (result.dynamicInfo && result.jsxCount > 0) {
+        out.push({
+          dynamicExpression: result.dynamicInfo,
+          children: jsxElements
+        });
+      } else {
+        out.push(...jsxElements);
+      }
       continue;
     }
   }
@@ -14185,6 +14258,23 @@ function jsxAstToTree(ast) {
     for (const child of childrenFromJsx(ast)) {
       if ("slot" in child) {
         out.push({ name: CHILDREN_SLOT, children: [] });
+      } else if ("dynamicExpression" in child) {
+        const dynamicInfo = child.dynamicExpression;
+        const variableName = dynamicInfo.variable || "VAR";
+        const operation = dynamicInfo.operation || "";
+        let displayName = variableName;
+        if (dynamicInfo.type === "map" || dynamicInfo.type === "filter") {
+          displayName = `${variableName}.${operation} (`;
+        } else if (dynamicInfo.type === "ternary") {
+          displayName = `${variableName} ? (`;
+        } else if (dynamicInfo.type === "logical") {
+          displayName = `${variableName} ${operation} (`;
+        }
+        out.push({
+          name: displayName,
+          children: child.children.flatMap((c) => jsxAstToTree(c)),
+          dynamicExpression: dynamicInfo
+        });
       } else {
         out.push(...jsxAstToTree(child));
       }
@@ -14194,7 +14284,23 @@ function jsxAstToTree(ast) {
   const name = jsxNameToString(ast.openingElement.name);
   const childrenAst = childrenFromJsx(ast);
   const children = childrenAst.flatMap(
-    (c) => "slot" in c ? [{ name: CHILDREN_SLOT, children: [] }] : jsxAstToTree(c)
+    (c) => "slot" in c ? [{ name: CHILDREN_SLOT, children: [] }] : "dynamicExpression" in c ? [{
+      name: (() => {
+        const dynamicInfo = c.dynamicExpression;
+        const variableName = dynamicInfo.variable || "VAR";
+        const operation = dynamicInfo.operation || "";
+        if (dynamicInfo.type === "map" || dynamicInfo.type === "filter") {
+          return `${variableName}.${operation} (`;
+        } else if (dynamicInfo.type === "ternary") {
+          return `${variableName} ? (`;
+        } else if (dynamicInfo.type === "logical") {
+          return `${variableName} ${operation} (`;
+        }
+        return variableName;
+      })(),
+      children: c.children.flatMap((child) => jsxAstToTree(child)),
+      dynamicExpression: c.dynamicExpression
+    }] : jsxAstToTree(c)
   );
   return [{ name, children }];
 }

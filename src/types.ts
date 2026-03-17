@@ -2,20 +2,11 @@ export type JsxTreeNode = {
   name: string;
   children: JsxTreeNode[];
   expandedFromFile?: string;
-};
-
-export type BuildOptions = {
-  rootDir: string; // absolute
-  startFile: string; // absolute
-  ignoreDirs: string[]; // relative to rootDir
-  maxDepth: number;
-};
-
-export type JsxTreeNode = {
-  name: string;
-  children: JsxTreeNode[];
-  /** For display: keep node even if expanded from another file. */
-  expandedFromFile?: string;
+  dynamicExpression?: {
+    type: 'map' | 'filter' | 'ternary' | 'logical' | 'call' | 'other';
+    variable?: string;
+    operation?: string;
+  };
 };
 
 export type BuildOptions = {
